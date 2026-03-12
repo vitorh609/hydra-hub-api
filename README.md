@@ -58,6 +58,11 @@ Endpoints:
 - `GET /notes/{id}`
 - `PUT /notes/{id}`
 - `DELETE /notes/{id}`
+- `POST /tickets`
+- `GET /tickets`
+- `GET /tickets/{id}`
+- `PUT /tickets/{id}`
+- `DELETE /tickets/{id}`
 
 ## Como Adicionar Um Novo Recurso (Novo CRUD Para Uma Nova Tabela)
 
