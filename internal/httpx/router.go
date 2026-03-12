@@ -5,6 +5,7 @@ import (
 
 	"api-hydra-hub/internal/account-settings"
 	"api-hydra-hub/internal/notes"
+	"api-hydra-hub/internal/tickets"
 	"api-hydra-hub/internal/users"
 
 	"github.com/go-chi/chi/v5"
@@ -27,6 +28,9 @@ func NewRouter(pool *pgxpool.Pool) http.Handler {
 	noteRepo := notes.NewRepo(pool)
 	noteHandler := notes.NewHandler(noteRepo)
 
+	ticketRepo := tickets.NewRepo(pool)
+	ticketHandler := tickets.NewHandler(ticketRepo)
+
 	accountSettingsRepo := account_settings.NewRepo(pool)
 	accountSettingsHandler := account_settings.NewHandler(accountSettingsRepo)
 
@@ -44,6 +48,14 @@ func NewRouter(pool *pgxpool.Pool) http.Handler {
 		r.Get("/{id}", noteHandler.GetByID)
 		r.Put("/{id}", noteHandler.Update)
 		r.Delete("/{id}", noteHandler.Delete)
+	})
+
+	r.Route("/tickets", func(r chi.Router) {
+		r.Post("/", ticketHandler.Create)
+		r.Get("/", ticketHandler.List)
+		r.Get("/{id}", ticketHandler.GetByID)
+		r.Put("/{id}", ticketHandler.Update)
+		r.Delete("/{id}", ticketHandler.Delete)
 	})
 
 	r.Route("/account-settings", func(r chi.Router) {
