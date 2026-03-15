@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
+
+	"api-hydra-hub/internal/auth"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -24,10 +27,13 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "json inválido"})
 		return
 	}
-	if in.Name == "" || in.Email == "" || in.PasswordHash == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "name, email e password_hash são obrigatórios"})
+	passwordHash := passwordHashFromInput(in.Password, in.PasswordHash)
+	if in.Name == "" || in.Email == "" || passwordHash == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "name, email e password são obrigatórios"})
 		return
 	}
+	in.PasswordHash = passwordHash
+	in.Password = ""
 
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
@@ -83,6 +89,16 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if in.Password != nil || in.PasswordHash != nil {
+		passwordHash := passwordHashFromInput(optionalStringValue(in.Password), optionalStringValue(in.PasswordHash))
+		if passwordHash != "" {
+			in.PasswordHash = &passwordHash
+		} else {
+			in.PasswordHash = nil
+		}
+		in.Password = nil
+	}
+
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
@@ -124,4 +140,22 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 		return
 	}
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+func passwordHashFromInput(password string, passwordHash string) string {
+	password = strings.TrimSpace(password)
+	passwordHash = strings.TrimSpace(passwordHash)
+
+	if password != "" {
+		return auth.HashPassword(password)
+	}
+
+	return passwordHash
+}
+
+func optionalStringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }

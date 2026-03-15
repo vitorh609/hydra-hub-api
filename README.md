@@ -28,12 +28,14 @@ API REST em Go usando `chi` para roteamento HTTP e `pgx/v5` (`pgxpool`) para ace
 Variáveis esperadas:
 
 - `DATABASE_URL` (obrigatória)
+- `CORS_ALLOWED_ORIGINS` (opcional; lista separada por vírgula)
 - `PORT` (opcional, default `3000`)
 
 Exemplo:
 
 ```env
 DATABASE_URL=postgresql://user:pass@host:5432/dbname?sslmode=require
+CORS_ALLOWED_ORIGINS=http://localhost:4200,http://127.0.0.1:4200
 PORT=3000
 ```
 
@@ -45,9 +47,12 @@ Observação: atualmente existe um `.env` no repositório. Em projetos reais, ev
 go run ./cmd/api
 ```
 
+Se `DATABASE_URL` não estiver configurada, a aplicação falha na inicialização com erro explícito.
+
 Endpoints:
 
 - `GET /health` -> `{"status":"ok"}`
+- `POST /auth/login`
 - `POST /users`
 - `GET /users`
 - `GET /users/{id}`
@@ -63,6 +68,49 @@ Endpoints:
 - `GET /tickets/{id}`
 - `PUT /tickets/{id}`
 - `DELETE /tickets/{id}`
+
+## Autenticação
+
+- Todos os endpoints de negócio (`/users`, `/notes`, `/tickets`, `/account-settings`) exigem login.
+- O login é feito em `POST /auth/login` com `login` e `password`.
+- O token deve ser enviado em `Authorization: Bearer <token>`.
+- A sessão expira após `15 minutos` sem requisições autenticadas.
+- Cada requisição autenticada renova a sessão por mais `15 minutos`.
+
+Exemplo de login:
+
+```bash
+curl -X POST http://localhost:3000/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"login":"user@email.com","password":"123456"}'
+```
+
+Depois use o token retornado:
+
+```bash
+curl http://localhost:3000/users \
+  -H 'Authorization: Bearer SEU_TOKEN'
+```
+
+Documentação mais objetiva do fluxo: `internal/auth/README.md`.
+
+## Deploy no Render
+
+- Build Command: `go build -tags netgo -ldflags '-s -w' -o app ./cmd/api`
+- Start Command: `./app`
+- Health Check Path: `/health`
+
+Variáveis de ambiente necessárias:
+
+- `DATABASE_URL`: obrigatória. A API falha na inicialização se não estiver configurada.
+- `CORS_ALLOWED_ORIGINS`: recomendada em produção. Informe os domínios permitidos separados por vírgula.
+- `PORT`: o Render fornece essa variável automaticamente. Localmente, o default continua sendo `3000`.
+
+Exemplo de `CORS_ALLOWED_ORIGINS` em produção:
+
+```env
+CORS_ALLOWED_ORIGINS=https://app.exemplo.com,https://admin.exemplo.com
+```
 
 ## Como Adicionar Um Novo Recurso (Novo CRUD Para Uma Nova Tabela)
 

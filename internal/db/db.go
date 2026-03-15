@@ -12,7 +12,7 @@ import (
 
 func Connect(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 	if strings.TrimSpace(databaseURL) == "" {
-		return nil, errors.New("DATABASE_URL vazio")
+		return nil, errors.New("DATABASE_URL nao configurada")
 	}
 
 	cfg, err := pgxpool.ParseConfig(databaseURL)

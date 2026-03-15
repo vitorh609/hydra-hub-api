@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"api-hydra-hub/internal/account-settings"
+	"api-hydra-hub/internal/auth"
 	"api-hydra-hub/internal/notes"
 	"api-hydra-hub/internal/tickets"
 	"api-hydra-hub/internal/users"
@@ -24,6 +25,8 @@ func NewRouter(pool *pgxpool.Pool) http.Handler {
 
 	userRepo := users.NewRepo(pool)
 	userHandler := users.NewHandler(userRepo)
+	authRepo := auth.NewRepo(pool)
+	authHandler := auth.NewHandler(authRepo)
 
 	noteRepo := notes.NewRepo(pool)
 	noteHandler := notes.NewHandler(noteRepo)
@@ -34,36 +37,42 @@ func NewRouter(pool *pgxpool.Pool) http.Handler {
 	accountSettingsRepo := account_settings.NewRepo(pool)
 	accountSettingsHandler := account_settings.NewHandler(accountSettingsRepo)
 
-	r.Route("/users", func(r chi.Router) {
-		r.Post("/", userHandler.Create)
-		r.Get("/", userHandler.List)
-		r.Get("/{id}", userHandler.GetByID)
-		r.Put("/{id}", userHandler.Update)
-		r.Delete("/{id}", userHandler.Delete)
-	})
+	r.Post("/auth/login", authHandler.Login)
 
-	r.Route("/notes", func(r chi.Router) {
-		r.Post("/", noteHandler.Create)
-		r.Get("/", noteHandler.List)
-		r.Get("/{id}", noteHandler.GetByID)
-		r.Put("/{id}", noteHandler.Update)
-		r.Delete("/{id}", noteHandler.Delete)
-	})
+	r.Group(func(r chi.Router) {
+		r.Use(auth.RequireAuth(authRepo))
 
-	r.Route("/tickets", func(r chi.Router) {
-		r.Post("/", ticketHandler.Create)
-		r.Get("/", ticketHandler.List)
-		r.Get("/{id}", ticketHandler.GetByID)
-		r.Put("/{id}", ticketHandler.Update)
-		r.Delete("/{id}", ticketHandler.Delete)
-	})
+		r.Route("/users", func(r chi.Router) {
+			r.Post("/", userHandler.Create)
+			r.Get("/", userHandler.List)
+			r.Get("/{id}", userHandler.GetByID)
+			r.Put("/{id}", userHandler.Update)
+			r.Delete("/{id}", userHandler.Delete)
+		})
 
-	r.Route("/account-settings", func(r chi.Router) {
-		r.Post("/", accountSettingsHandler.Create)
-		r.Get("/", accountSettingsHandler.List)
-		r.Get("/{id}", accountSettingsHandler.GetByID)
-		r.Put("/{id}", accountSettingsHandler.Update)
-		r.Delete("/{id}", accountSettingsHandler.Delete)
+		r.Route("/notes", func(r chi.Router) {
+			r.Post("/", noteHandler.Create)
+			r.Get("/", noteHandler.List)
+			r.Get("/{id}", noteHandler.GetByID)
+			r.Put("/{id}", noteHandler.Update)
+			r.Delete("/{id}", noteHandler.Delete)
+		})
+
+		r.Route("/tickets", func(r chi.Router) {
+			r.Post("/", ticketHandler.Create)
+			r.Get("/", ticketHandler.List)
+			r.Get("/{id}", ticketHandler.GetByID)
+			r.Put("/{id}", ticketHandler.Update)
+			r.Delete("/{id}", ticketHandler.Delete)
+		})
+
+		r.Route("/account-settings", func(r chi.Router) {
+			r.Post("/", accountSettingsHandler.Create)
+			r.Get("/", accountSettingsHandler.List)
+			r.Get("/{id}", accountSettingsHandler.GetByID)
+			r.Put("/{id}", accountSettingsHandler.Update)
+			r.Delete("/{id}", accountSettingsHandler.Delete)
+		})
 	})
 
 	return r
