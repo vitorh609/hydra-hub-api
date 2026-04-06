@@ -1,10 +1,14 @@
 package httpx
 
 import (
+	"context"
 	"net/http"
+	"os"
+	"time"
 
 	"api-hydra-hub/internal/account-settings"
 	"api-hydra-hub/internal/auth"
+	"api-hydra-hub/internal/integrations/clickup"
 	"api-hydra-hub/internal/notes"
 	"api-hydra-hub/internal/tickets"
 	"api-hydra-hub/internal/users"
@@ -36,6 +40,20 @@ func NewRouter(pool *pgxpool.Pool) http.Handler {
 
 	accountSettingsRepo := account_settings.NewRepo(pool)
 	accountSettingsHandler := account_settings.NewHandler(accountSettingsRepo)
+
+	clickupRepo := clickup.NewRepo(pool)
+	schemaCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := clickupRepo.EnsureSchema(schemaCtx); err != nil {
+		panic(err)
+	}
+	clickupCipher, err := clickup.NewCredentialCipher(os.Getenv("CLICKUP_CREDENTIALS_ENCRYPTION_KEY"), "v1")
+	if err != nil {
+		panic(err)
+	}
+	clickupClient := clickup.NewClient(nil)
+	clickupService := clickup.NewService(clickupRepo, clickupClient, clickupCipher, nil)
+	clickupHandler := clickup.NewHandler(clickupService)
 
 	r.Post("/auth/login", authHandler.Login)
 
@@ -72,6 +90,15 @@ func NewRouter(pool *pgxpool.Pool) http.Handler {
 			r.Get("/{id}", accountSettingsHandler.GetByID)
 			r.Put("/{id}", accountSettingsHandler.Update)
 			r.Delete("/{id}", accountSettingsHandler.Delete)
+		})
+
+		r.Route("/integrations/clickup", func(r chi.Router) {
+			r.Post("/connect", clickupHandler.Connect)
+			r.Get("/status", clickupHandler.Status)
+			r.Get("/spaces", clickupHandler.ListSpaces)
+			r.Get("/spaces/{spaceId}/folders", clickupHandler.ListFolders)
+			r.Get("/lists/{listId}/tasks", clickupHandler.ListTasks)
+			r.Post("/lists/{listId}/tasks", clickupHandler.CreateTask)
 		})
 	})
 

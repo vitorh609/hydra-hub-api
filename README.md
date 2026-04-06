@@ -30,6 +30,7 @@ Variáveis esperadas:
 - `DATABASE_URL` (obrigatória)
 - `CORS_ALLOWED_ORIGINS` (opcional; lista separada por vírgula)
 - `PORT` (opcional, default `3000`)
+- `CLICKUP_CREDENTIALS_ENCRYPTION_KEY` (opcional para a API geral, mas obrigatória para habilitar a integração ClickUp; valor deve ser uma chave AES-256 em Base64)
 
 Exemplo:
 
@@ -37,6 +38,7 @@ Exemplo:
 DATABASE_URL=postgresql://user:pass@host:5432/dbname?sslmode=require
 CORS_ALLOWED_ORIGINS=http://localhost:4200,http://127.0.0.1:4200
 PORT=3000
+CLICKUP_CREDENTIALS_ENCRYPTION_KEY=<base64-de-32-bytes>
 ```
 
 Observação: atualmente existe um `.env` no repositório. Em projetos reais, evite commitar credenciais.
@@ -68,10 +70,17 @@ Endpoints:
 - `GET /tickets/{id}`
 - `PUT /tickets/{id}`
 - `DELETE /tickets/{id}`
+- `POST /integrations/clickup/connect`
+- `GET /integrations/clickup/status`
+- `GET /integrations/clickup/spaces`
+- `GET /integrations/clickup/spaces/{spaceId}/folders`
+- `GET /integrations/clickup/lists/{listId}/tasks`
+- `POST /integrations/clickup/lists/{listId}/tasks`
 
 ## Autenticação
 
 - Todos os endpoints de negócio (`/users`, `/notes`, `/tickets`, `/account-settings`) exigem login.
+- Os endpoints de integração (`/integrations/clickup/*`) também exigem login e são escopados ao usuário autenticado na arquitetura atual.
 - O login é feito em `POST /auth/login` com `login` e `password`.
 - O token deve ser enviado em `Authorization: Bearer <token>`.
 - A sessão expira após `15 minutos` sem requisições autenticadas.
@@ -90,6 +99,164 @@ Depois use o token retornado:
 ```bash
 curl http://localhost:3000/users \
   -H 'Authorization: Bearer SEU_TOKEN'
+```
+
+## Integração ClickUp
+
+A integração do ClickUp é totalmente server-side: o front-end envia requests apenas para a Hydra, e a Hydra é quem guarda o token criptografado, autentica no ClickUp, aplica timeout/retry e normaliza as respostas.
+
+Premissa adotada nesta versão:
+
+- Como a API atual ainda não possui um modelo explícito de tenant/workspace Hydra, a conexão do ClickUp foi isolada por usuário autenticado (`users.id`).
+- O token do ClickUp nunca é retornado pela API nem escrito em logs.
+- A tabela `clickup_connections` é criada automaticamente no bootstrap da API.
+
+### Configuração
+
+Defina `CLICKUP_CREDENTIALS_ENCRYPTION_KEY` com uma chave AES-256 em Base64. Exemplo para gerar localmente:
+
+```bash
+openssl rand -base64 32
+```
+
+Sem essa variável, a API sobe normalmente, mas os endpoints do ClickUp respondem `503`.
+
+### Endpoints
+
+`POST /integrations/clickup/connect`
+
+Request:
+
+```json
+{
+  "token": "pk_xxxxxxxxx",
+  "defaultWorkspaceId": "90123456",
+  "defaultWorkspaceName": "Hydra"
+}
+```
+
+Response:
+
+```json
+{
+  "connected": true,
+  "status": "connected",
+  "defaultWorkspaceId": "90123456",
+  "defaultWorkspaceName": "Hydra",
+  "lastCheckedAt": "2026-04-05T12:00:00Z"
+}
+```
+
+`GET /integrations/clickup/status`
+
+Response:
+
+```json
+{
+  "connected": true,
+  "status": "connected",
+  "defaultWorkspaceId": "90123456",
+  "defaultWorkspaceName": "Hydra",
+  "lastCheckedAt": "2026-04-05T12:03:00Z"
+}
+```
+
+`GET /integrations/clickup/spaces`
+
+Response:
+
+```json
+[
+  {
+    "id": "445566",
+    "name": "Engineering",
+    "private": false,
+    "workspace": {
+      "id": "90123456",
+      "name": "Hydra"
+    }
+  }
+]
+```
+
+`GET /integrations/clickup/spaces/{spaceId}/folders`
+
+Response:
+
+```json
+{
+  "spaceId": "445566",
+  "folders": [
+    {
+      "id": "100",
+      "name": "Backlog",
+      "hidden": false,
+      "spaceId": "445566"
+    }
+  ],
+  "lists": [
+    {
+      "id": "200",
+      "name": "Sprint",
+      "spaceId": "445566",
+      "folderId": "100"
+    }
+  ]
+}
+```
+
+`GET /integrations/clickup/lists/{listId}/tasks?page=0`
+
+Response:
+
+```json
+{
+  "listId": "200",
+  "pagination": {
+    "page": 0,
+    "hasMore": true
+  },
+  "tasks": [
+    {
+      "id": "task_1",
+      "name": "Implementar integração",
+      "status": "open",
+      "priority": "high",
+      "listId": "200",
+      "dateCreated": "2026-04-05T12:00:00Z",
+      "dateUpdated": "2026-04-05T12:10:00Z",
+      "assigneeIds": ["123"]
+    }
+  ]
+}
+```
+
+`POST /integrations/clickup/lists/{listId}/tasks`
+
+Request:
+
+```json
+{
+  "name": "Nova task via Hydra",
+  "description": "Criada pela API interna",
+  "priority": 2,
+  "assigneeIds": ["123"]
+}
+```
+
+Response:
+
+```json
+{
+  "id": "task_2",
+  "name": "Nova task via Hydra",
+  "description": "Criada pela API interna",
+  "status": "to do",
+  "listId": "200",
+  "dateCreated": "2026-04-05T12:20:00Z",
+  "dateUpdated": "2026-04-05T12:20:00Z",
+  "assigneeIds": ["123"]
+}
 ```
 
 Documentação mais objetiva do fluxo: `internal/auth/README.md`.

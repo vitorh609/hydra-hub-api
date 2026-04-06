@@ -10,6 +10,10 @@ func withUser(ctx context.Context, user SessionUser) context.Context {
 	return context.WithValue(ctx, userContextKey, user)
 }
 
+func ContextWithUser(ctx context.Context, user SessionUser) context.Context {
+	return withUser(ctx, user)
+}
+
 func UserFromContext(ctx context.Context) (SessionUser, bool) {
 	user, ok := ctx.Value(userContextKey).(SessionUser)
 	return user, ok
