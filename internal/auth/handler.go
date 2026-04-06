@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -46,10 +47,25 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	expiresAt := time.Now().UTC().Add(SessionIdleTimeout)
-	if err := h.repo.CreateSession(ctx, user.ID, tokenHash, expiresAt); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
-		return
+	now := time.Now().UTC()
+	expiresAt := now.Add(SessionIdleTimeout)
+
+	session, err := h.repo.FindActiveSessionByUserID(ctx, user.ID, now)
+	if err != nil {
+		if errors.Is(err, ErrInvalidToken) {
+			if err := h.repo.CreateSession(ctx, user.ID, tokenHash, expiresAt); err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+				return
+			}
+		} else {
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+			return
+		}
+	} else {
+		if err := h.repo.RefreshSession(ctx, session.ID, tokenHash, expiresAt); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+			return
+		}
 	}
 
 	writeJSON(w, http.StatusOK, LoginResponse{

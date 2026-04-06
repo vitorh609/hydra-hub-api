@@ -45,6 +45,43 @@ func (r *Repo) CreateSession(ctx context.Context, userID, tokenHash string, expi
 	return err
 }
 
+func (r *Repo) FindActiveSessionByUserID(ctx context.Context, userID string, now time.Time) (Session, error) {
+	var session Session
+
+	err := r.pool.QueryRow(ctx, `
+		select id, user_id, token_hash, expires_at, revoked_at
+		from auth_sessions
+		where user_id = $1
+			and revoked_at is null
+			and expires_at > $2
+		order by expires_at desc
+		limit 1
+	`, userID, now).Scan(
+		&session.ID,
+		&session.UserID,
+		&session.TokenHash,
+		&session.ExpiresAt,
+		&session.RevokedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Session{}, ErrInvalidToken
+	}
+
+	return session, err
+}
+
+func (r *Repo) RefreshSession(ctx context.Context, sessionID, tokenHash string, expiresAt time.Time) error {
+	_, err := r.pool.Exec(ctx, `
+		update auth_sessions
+		set token_hash = $2,
+			last_activity_at = now(),
+			expires_at = $3,
+			revoked_at = null
+		where id = $1
+	`, sessionID, tokenHash, expiresAt)
+	return err
+}
+
 func (r *Repo) ValidateAndTouchSession(ctx context.Context, tokenHash string, now time.Time, expiresAt time.Time) (SessionUser, time.Time, error) {
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {

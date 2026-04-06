@@ -45,6 +45,12 @@ Authorization: Bearer TOKEN_AQUI
 - Cada nova requisição autenticada renova a validade por mais 15 minutos.
 - O backend devolve o novo vencimento no header `X-Session-Expires-At`.
 
+## Novo login com sessão ativa
+
+- Se o usuário fizer login novamente enquanto ainda tiver uma sessão ativa, o backend reutiliza a sessão existente.
+- Como o sistema armazena apenas o hash do token, o token anterior não pode ser reenviado literalmente.
+- Nesse caso, o backend gira o token, atualiza o vencimento da sessão e devolve o novo token na resposta do login.
+
 ## Tabela nova no Supabase/Postgres
 
 Para essa estratégia funcionar de forma persistente, crie a tabela abaixo:
